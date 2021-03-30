@@ -34,7 +34,7 @@ class WebCam:
 
         self.list = cam_list
         self.cap = cv2.VideoCapture(self.camera)
-        self.webcam_base = self.__get_wecam_size()
+        self.webcam_base = self._get_wecam_size()
 
     def get_frame(self):
         _, frame = self.cap.read()
@@ -69,13 +69,18 @@ class WebCam:
         return self.cap.grab()
 
     def set_logo(self, path):
-        self.logo = Image.open(path)
-        self.logo.thumbnail((150, 150))
+        try:
+            self.logo = Image.open(path)
+            self.logo.thumbnail((150, 30))
+        except IOError:
+            return False
+
+        return True
 
     def change_camera(self, camera):
         self.cap = cv2.VideoCapture(camera)
 
-    def __get_wecam_size(self):
+    def _get_wecam_size(self):
         _, frame = self.cap.read()
 
         # Converte a cor do frame

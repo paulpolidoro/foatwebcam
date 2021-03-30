@@ -1,6 +1,6 @@
 import webcam
 
-from tkinter import Tk, Label, Menu, simpledialog, BooleanVar, filedialog, IntVar
+from tkinter import Tk, Label, Menu, simpledialog, BooleanVar, filedialog, IntVar, colorchooser, messagebox, StringVar
 
 from PIL import Image, ImageTk
 import sys
@@ -18,20 +18,22 @@ try:
         config.read_file(f)
 except IOError:
     config['config'] = {
-        'label_height': 200,
-        'label_width': 300,
-        'label_position_x': 35,
-        'label_position_y': 550,
-        'background_color': '#ff0035',
+        'camera': 0,
+        'size': '300x200',
+        'position': '64,485',
+        'background_color': '#00bf49',
         'opacity': 90,
         'cameraid': 0,
-        'horizontalinvert': False,
-        'fps': 30,
-        'border_size': 3,
-        'show_logo': True,
-        'webcam_logo': 'logo.png',
-        'pause_image': 'bg.jpg',
-        'show_cam': True
+        'flip_horizontal': 'True',
+        'fps': 60,
+        'border_size': 2,
+        'show_logo': 'False',
+        'logo': '',
+        'pause_image': '',
+        'show_cam': 'True',
+        'flip': '2',
+        'lock_position': 'False',
+        'border_rgb': 'False'
     }
 
 
@@ -49,7 +51,7 @@ size = int(config['config']['size'].split("x")[0]), int(config['config']['size']
 position = int(config['config']['position'].split(",")[0]), int(config['config']['position'].split(",")[1])
 
 opacity = int(config['config']['opacity'])
-fps = ceil(1000 / int(config['config']['fps']))
+fps = 20
 border_size = int(config['config']['border_size'])
 bg_color = config['config']['background_color']
 
@@ -67,15 +69,31 @@ show_cam.set(True)
 # Inicia a configuração de flip da imagem
 flip = IntVar()
 
+show_logo_status = StringVar()
+show_logo_status.set('disabled')
+
 # Define a visibilidade do logo
 show_logo = BooleanVar()
 show_logo.set(str_to_bool(config['config']['show_logo']))
+
+lock_position = BooleanVar()
+lock_position.set(str_to_bool(config['config']['lock_position']))
+
+border_rgb = BooleanVar()
+border_rgb.set(False)
+
+left_click_x = 0
+left_click_y = 0
+
+need_save = False
 
 
 def menu(event):
     popup = Menu(window, tearoff=0)
 
     popup.add_checkbutton(label="Mostrar facecam", onvalue=1, offvalue=0, variable=show_cam, command=show_webcam)
+
+    popup.add_checkbutton(label="Bloquear posição", onvalue=1, offvalue=0, variable=lock_position, command=do_lock_position)
 
     camera_menu = Menu(window, tearoff=0)
 
@@ -91,20 +109,22 @@ def menu(event):
     flip_menu.add_radiobutton(label="Horizontal + vertical", value=cam.FLIP_HORIZONTAL_VERTICAL, variable=flip,
                               command=do_flip)
 
-    popup.add_cascade(label="Flip", menu=flip_menu)
+    popup.add_cascade(label="Flip da facecam", menu=flip_menu)
 
     popup.add_separator()
-    popup.add_checkbutton(label="Mostrar logo", onvalue=1, offvalue=0, variable=show_logo, command=do_show_logo)
+    popup.add_checkbutton(label="Mostrar logo", onvalue=1, offvalue=0, variable=show_logo, command=do_show_logo, state=show_logo_status.get())
     popup.add_command(label="Alterar logo", command=do_add_logo)
+    popup.add_separator()
+
+    popup.add_command(label="Largura da borda", command=do_border_size)
+    popup.add_command(label="Cor da borda", command=do_border_color)
+    popup.add_checkbutton(label='Borda RGB', onvalue=1, offvalue=0, variable=border_rgb, command=do_border_rgb)
+
     popup.add_separator()
 
     settings = Menu(popup, tearoff=0)
     settings.add_command(label="Tamanho da janela", command=do_size)
     settings.add_command(label="Opacidade da janela", command=do_opacity)
-    settings.add_command(label="Posição da janela", command=do_position)
-    settings.add_command(label="Largura da borda", command=do_border_size)
-    settings.add_command(label="Cor da borda", command=do_change_border_color)
-    settings.add_command(label="FPS", command=do_fps)
 
     settings.add_separator()
     settings.add_command(label="Alterar imagem de pausa", command=do_custom_pause_image)
@@ -160,16 +180,29 @@ def do_size():
         save_change('size', value)
 
 
-def do_position():
-    global position
+def do_border_color():
+    global bg_color
+    global border_rgb
 
-    value = simpledialog.askstring("Posição da janela", "X, Y",
-                                   initialvalue="%s,%s" % (position[0], position[1]))
-    if value is not None:
-        position = value.split(',')[0], value.split(',')[1]
-        save_change('position', value)
+    if border_rgb.get():
+        border_rgb.set(False)
 
-        window.geometry("+%s+%s" % (value.split(',')[0], value.split(',')[1]))
+    # variable to store hexadecimal code of color
+    color_code = colorchooser.askcolor(title="Selecione uma cor")
+
+    display.configure(background=color_code[1])
+    save_change("background_color", color_code[1])
+    bg_color = color_code[1]
+
+
+def do_border_rgb():
+    global border_rgb
+    global bg_color
+
+    save_change('border_rgb', False)
+
+    if not border_rgb.get():
+        display.configure(background=bg_color)
 
 
 def do_opacity():
@@ -182,15 +215,6 @@ def do_opacity():
         save_change('opacity', value)
 
 
-def do_fps():
-    global fps
-
-    value = simpledialog.askinteger("FPS", "0 - 60", initialvalue=str(fps))
-    if value is not None:
-        fps = ceil(1000 / int(value))
-        save_change('fps', value)
-
-
 def do_border_size():
     global border_size
 
@@ -200,16 +224,6 @@ def do_border_size():
 
         display.configure(borderwidth=border_size)
         save_change('border_size', value)
-
-
-def do_change_border_color():
-    global bg_color
-
-    value = simpledialog.askstring("Cor da borda", "Hex", initialvalue=bg_color)
-
-    if value is not None:
-        display.configure(background=value)
-        save_change('background_color', value)
 
 
 def do_custom_pause_image():
@@ -227,18 +241,29 @@ def do_custom_pause_image():
 
 def do_add_logo():
     global logo
+    global show_logo_status
 
     value = filedialog.askopenfile('r', filetypes=[('Arquivos de imagem', ['*.jpg', '*.png', '*.jpeg', '*.gif'])])
 
     if value is not None:
         save_change('logo', value.name)
         logo = value.name
+        cam.set_logo(value.name)
+
+        show_logo_status.set('normal')
 
         if not cam.is_open():
             show_pause_image()
 
 
 def do_close():
+    global need_save
+
+    if need_save:
+        if messagebox.askyesno('Finalizar Float Webcam', 'Existem alterações não salvas, deseja salvá-las antes de '
+                                                         'sair?'):
+            save()
+
     window.withdraw()  # if you want to bring it back
     sys.exit()  # if you want to exit the entire thing
 
@@ -251,17 +276,46 @@ def do_save():
     save()
 
 
+def save_position(event):
+    value = "%s,%s" % (window.winfo_pointerx() - left_click_x, window.winfo_pointery() - left_click_y)
+    save_change('position', value)
+
+    save()
+
+
 def save_change(key, value):
+    global need_save
+
     config['config'][key] = str(value)
+
+    need_save = True
 
 
 def save():
+    global need_save
+
     with open('config.ini', 'w') as configfile:
         config.write(configfile)
+
+    need_save = False
+
+
+def rgbtohex(red, green, blue):
+    return f'#{red:02x}{green:02x}{blue:02x}'
+
+
+r = 255
+g = 0
+b = 0
 
 
 def show_webcam():
     global fps
+    global bg_color
+    global border_rgb
+    global r
+    global g
+    global b
 
     if not show_cam.get():
         if cam.is_open():
@@ -279,33 +333,78 @@ def show_webcam():
     display.imgtk = imgtk  # Shows frame for display 1
     display.configure(image=imgtk)
 
+    if border_rgb.get():
+        display.configure(background=rgbtohex(r, g, b))
+
+        if r > 0 and g == 0:
+            r = r - 15
+            b = b + 15
+        elif b > 0 and r == 0:
+            b = b - 15
+            g = g + 15
+        elif g > 0 and b == 0:
+            g = g - 15
+            r = r + 15
+
     window.after(fps, show_webcam)
 
 
 def show_pause_image():
     global pause_image
 
-    # Tenta carregar a imagem do disco
-    try:
-        img_pause = Image.open(pause_image)
-        img_pause.thumbnail((size[0], size[1]))
+    if pause_image != '':
+        # Tenta carregar a imagem do disco
+        try:
+            img_pause = Image.open(pause_image)
+            img_pause.thumbnail((size[0], size[1]))
+        except IOError:
+            messagebox.showerror('Imagem de pausa', 'A imagem de pausa não pôde ser carregada.')
 
-        img_pause = ImageTk.PhotoImage(image=img_pause)
-    except IOError:
+            img_pause = Image.new("RGB", (size[0], size[1]))
+    else:
         img_pause = Image.new("RGB", (size[0], size[1]))
-        img_pause = ImageTk.PhotoImage(image=img_pause)
+
+    img_pause = ImageTk.PhotoImage(image=img_pause)
 
     # Mostra a imagem
     display.img = img_pause
     display.configure(image=img_pause)
 
 
+def do_lock_position():
+    global lock_position
+
+    save_change('lock_position', lock_position.get())
+
+
+def dragwin(event):
+    global size
+    global left_click_x
+    global left_click_y
+    global lock_position
+
+    if not lock_position.get():
+        x = window.winfo_pointerx() - left_click_x
+        y = window.winfo_pointery() - left_click_y
+
+        window.geometry('+{x}+{y}'.format(x=x, y=y))
+
+
+def left_click(event):
+    global left_click_x
+    global left_click_y
+
+    left_click_x = event.x
+    left_click_y = event.y
+
+
 # Aplica as definições da janela principal
+window.title('Float Webcam')
 window.iconbitmap('icon.ico')
 window.attributes('-alpha', opacity / 100)
-window.overrideredirect(True)
 window.wm_attributes("-topmost", True)
 window.geometry("+%s+%s" % (position[0], position[1]))
+window.overrideredirect(True)
 
 # Cria o display de exibição
 display = Label(window, borderwidth=border_size)
@@ -314,14 +413,30 @@ display.configure(background=bg_color)
 
 # Obtem a Webcam
 cam = webcam.WebCam(0, (size[0], size[1]))
-cam.set_logo(logo)
+
 cam.show_logo = show_logo.get()
+
+if logo != '':
+    if not cam.set_logo(logo):
+        show_logo_status.set('disabled')
+        show_logo.set(False)
+        cam.show_logo = False
+        messagebox.showerror('Logo não encontrado', 'O logo selecionado não pôde ser localizado.')
 
 # Define o primeiro flip
 flip.set(cam.FLIP_ORIGINAL)
 
-# Inicia a webcam
-show_webcam()
+if cam.list is None:
+    messagebox.showerror('Webcam', 'Nenhuma webcam foi encontrada. Para utilizar o programa, conecte ou ative uma '
+                                   'webcam no seu sistema.')
+    do_close()
+else:
+    # Inicia a webcam
+    show_webcam()
 
 window.bind("<ButtonRelease-3>", menu)
+window.bind("<Button-1>", left_click)
+window.bind("<ButtonRelease-1>", save_position)
+window.bind("<B1-Motion>", dragwin)
+
 window.mainloop()
